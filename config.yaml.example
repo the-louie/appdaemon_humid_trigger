@@ -1,0 +1,14 @@
+HumidTrigger:
+  module: i1_humid_trigger
+  class: HumidTrigger 
+  entity: "sensor.basement_humid" 
+  switches:
+    - entity: "switch.basement_fan"
+      lt: 
+        state: "off"
+        value: 45
+      gt: 
+        state: "on"
+        value: 50
+
+
