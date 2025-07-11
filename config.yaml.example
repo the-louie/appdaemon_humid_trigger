@@ -1,14 +1,17 @@
 HumidTrigger:
   module: i1_humid_trigger
   class: HumidTrigger 
-  entity: "sensor.basement_humid" 
+  sensors:
+    humidity: "sensor.room_humid" 
+    temperature: "sensor.room_temp"
   switches:
-    - entity: "switch.basement_fan"
+    - entity: "switch.room_switch"
+      min_temp: 10
       lt: 
         state: "off"
-        value: 45
+        value: 55
       gt: 
         state: "on"
-        value: 50
+        value: 60
 
 
