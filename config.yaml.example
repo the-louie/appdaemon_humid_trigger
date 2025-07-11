@@ -1,17 +1,43 @@
+# HumidTrigger App Configuration
+# This app monitors humidity and temperature sensors to automatically control
+# switches based on humidity thresholds and minimum temperature requirements.
+
 HumidTrigger:
   module: i1_humid_trigger
-  class: HumidTrigger 
+  class: HumidTrigger
+
+  # Sensor configuration (required)
   sensors:
-    humidity: "sensor.room_humid" 
+    humidity: "sensor.room_humid"
     temperature: "sensor.room_temp"
+
+  # Switch configuration (required)
   switches:
+    # Example 1: Full configuration
     - entity: "switch.room_switch"
-      min_temp: 10
-      lt: 
-        state: "off"
-        value: 55
-      gt: 
-        state: "on"
-        value: 60
+      min_temp: 10  # Minimum temperature in °C (default: 5°C)
+      lt:
+        state: "off"  # State when humidity is low (default: "off")
+        value: 55     # Humidity threshold in % (default: 45%)
+      gt:
+        state: "on"   # State when humidity is high (default: "on")
+        value: 60     # Humidity threshold in % (default: 60%)
+
+    # Example 2: Minimal configuration (uses defaults)
+    - entity: "switch.basement_dehumidifier"
+      # All other values will use defaults:
+      # min_temp: 5°C
+      # lt: {state: "off", value: 45%}
+      # gt: {state: "on", value: 60%}
+
+    # Example 3: Partial configuration (some defaults)
+    - entity: "switch.garage_fan"
+      min_temp: 15  # Custom minimum temperature
+      lt:
+        value: 40   # Custom low threshold
+        # state will default to "off"
+      gt:
+        value: 70   # Custom high threshold
+        # state will default to "on"
 
 

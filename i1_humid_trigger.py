@@ -201,11 +201,11 @@ class HumidTrigger(hass.Hass):
             bool: True if switch configuration is valid
         """
         try:
-            required_fields = ['entity', 'min_temp', 'lt', 'gt']
-            for field in required_fields:
-                if field not in switch:
-                    self.log(f" >> _validate_switch_config(): Switch {index} missing required field '{field}'", level="ERROR")
-                    return False
+            # Check if entity is present and valid
+            entity = switch.get('entity')
+            if entity is None:
+                self.log(f" >> _validate_switch_config(): Switch {index} has no entity specified - skipping", level="WARNING")
+                return False
 
             # Validate lt and gt sub-configurations
             lt_config = switch.get('lt', {})
@@ -221,9 +221,17 @@ class HumidTrigger(hass.Hass):
 
             # Validate numeric values
             try:
-                float(lt_config['value'])
-                float(gt_config['value'])
-                float(switch['min_temp'])
+                lt_value = lt_config.get('value')
+                gt_value = gt_config.get('value')
+                min_temp = switch.get('min_temp')
+
+                if lt_value is None or gt_value is None or min_temp is None:
+                    self.log(f" >> _validate_switch_config(): Switch {index} has None values for numeric fields", level="ERROR")
+                    return False
+
+                float(lt_value)
+                float(gt_value)
+                float(min_temp)
             except (ValueError, TypeError):
                 self.log(f" >> _validate_switch_config(): Switch {index} has invalid numeric values", level="ERROR")
                 return False
@@ -389,6 +397,15 @@ class HumidTrigger(hass.Hass):
             gt_value = gt_config.get('value')
             lt_state = lt_config.get('state')
             gt_state = gt_config.get('state')
+
+            # Validate required values
+            if entity is None:
+                self.log(f" >> Switch {switch_index}: No entity specified - skipping", level="WARNING")
+                return
+
+            if min_temp is None or lt_value is None or gt_value is None:
+                self.log(f" >> Switch {switch_index}: Missing required numeric values - skipping", level="ERROR")
+                return
 
             self.log(f" >> Processing switch {switch_index}: {entity}", level="DEBUG")
 
