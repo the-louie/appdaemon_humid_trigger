@@ -4,8 +4,8 @@ HumidTrigger AppDaemon App for Home Assistant
 This app monitors humidity and temperature sensors to automatically control
 switches based on humidity thresholds and minimum temperature requirements.
 
-Author: the_louie
-License: MIT
+Copyright (c) 2024 the_louie
+BSD 2-Clause License - see LICENSE file for details
 """
 
 import time
