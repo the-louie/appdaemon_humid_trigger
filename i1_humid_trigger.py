@@ -153,6 +153,11 @@ class HumidTrigger(hass.Hass):
     def _apply_state(self, entity, state, switch_index, reason):
         """Apply state to switch and log the action."""
         try:
+            # Check current state before making changes
+            current_state = self.get_state(entity)
+            if current_state == state:
+                return  # Already in desired state, no change needed
+
             if state == "off":
                 self.turn_off(entity)
                 self.log(f"Switch {switch_index}: Turned OFF {entity} ({reason})", level="INFO")
