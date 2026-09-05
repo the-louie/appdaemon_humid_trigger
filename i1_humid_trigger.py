@@ -9,6 +9,8 @@ BSD 2-Clause License - see LICENSE file for details
 """
 
 import appdaemon.plugins.hass.hassapi as hass
+
+import ha_states
 import traceback
 
 
@@ -162,7 +164,11 @@ class HumidTrigger(hass.Hass):
             self.log(f"Error during state check: {str(e)}", level="ERROR")
             self.log(f"Traceback: {traceback.format_exc()}", level="ERROR")
 
-    NOT_REPORTING = (None, "unavailable", "unknown")
+    # S7-07: the definition is shared estate-wide. The class attribute this
+    # replaces was defined in S5-03 and then never consulted -- the methods
+    # used their own literals, which is the variant-zoo problem in miniature,
+    # committed by the same hand that was fixing it elsewhere.
+    NOT_REPORTING = ha_states.HA_UNAVAILABLE_STATES
 
     def _report_missing_entities(self):
         """Report, at startup, anything this app drives that is not there.
@@ -192,7 +198,7 @@ class HumidTrigger(hass.Hass):
                     "nothing and will not say so again".format(label, entity),
                     level="ERROR",
                 )
-            elif str(state).lower() in ("unavailable", "unknown"):
+            elif ha_states.not_reporting(state):
                 unavailable.append(entity)
                 self.log(
                     "[HT002] {} {} is {}".format(label, entity, state),
@@ -246,7 +252,7 @@ class HumidTrigger(hass.Hass):
             if current_state == state:
                 return  # Already in desired state, no change needed
 
-            unreachable = str(current_state).lower() in ("unavailable", "unknown")
+            unreachable = ha_states.not_reporting(current_state)
             if unreachable:
                 # Still attempt it: an entity can report `unavailable` briefly
                 # and still accept the command, and refusing outright would be a
