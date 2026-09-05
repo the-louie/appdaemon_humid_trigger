@@ -61,6 +61,18 @@ class HumidTrigger(hass.Hass):
                     self.log(f"Switch {i}: Invalid numeric values - {str(e)}", level="ERROR")
                     continue
 
+            # Say so at startup if anything this app drives is not there.
+            #
+            # The config validation above checks the *shape* of each switch --
+            # that it has an `entity` key, a well-formed lt/gt pair, numeric
+            # thresholds. It never checked that the entity exists in Home
+            # Assistant, so a switch that had been renamed or removed produced
+            # a perfectly healthy-looking startup line and then silently drove
+            # nothing (T-56). The minivind plug was replaced on 2026-09-03 and
+            # `Fönster barnens rum` on 2026-09-05, so a config left pointing at
+            # a dead id is a live risk, not a hypothetical one.
+            self._report_missing_entities()
+
             # Set up listeners
             self.listen_state(self._state_change_humid, self.humid_sensor)
             self.listen_state(self._state_change_temp, self.temp_sensor)
@@ -150,20 +162,112 @@ class HumidTrigger(hass.Hass):
             self.log(f"Error during state check: {str(e)}", level="ERROR")
             self.log(f"Traceback: {traceback.format_exc()}", level="ERROR")
 
+    NOT_REPORTING = (None, "unavailable", "unknown")
+
+    def _report_missing_entities(self):
+        """Report, at startup, anything this app drives that is not there.
+
+        The distinction is the useful part, and it is the same one S4-08 drew
+        for the motion lights:
+
+        **Missing** -- `get_state` returns `None`. The id is wrong or the
+        hardware is gone. No amount of waiting fixes it, so it is an ERROR.
+
+        **Unavailable** -- the entity exists and is off the network. A flat
+        battery, a plug pulled out. It may well come back, so it is a WARNING.
+
+        Collapsing the two would either cry wolf at every brief dropout or stay
+        silent about a config pointing at an entity that no longer exists.
+
+        Returns the list of missing entity ids, so a caller (and a test) can
+        see what it found rather than only what it logged.
+        """
+        missing, unavailable = [], []
+        for label, entity in self._driven_entities():
+            state = self.get_state(entity)
+            if state is None:
+                missing.append(entity)
+                self.log(
+                    "[HT001] {} {} does not exist -- this app will drive "
+                    "nothing and will not say so again".format(label, entity),
+                    level="ERROR",
+                )
+            elif str(state).lower() in ("unavailable", "unknown"):
+                unavailable.append(entity)
+                self.log(
+                    "[HT002] {} {} is {}".format(label, entity, state),
+                    level="WARNING",
+                )
+        if not missing and not unavailable:
+            self.log(
+                "[HT003] all {} configured entities present".format(
+                    len(list(self._driven_entities()))
+                )
+            )
+        return missing
+
+    def _driven_entities(self):
+        """Every entity this app reads or writes, with a human label."""
+        if self.humid_sensor:
+            yield "humidity sensor", self.humid_sensor
+        if self.temp_sensor:
+            yield "temperature sensor", self.temp_sensor
+        for i, switch in enumerate(self.switches):
+            entity = switch.get("entity")
+            if entity:
+                yield "switch {}".format(i), entity
+
     def _apply_state(self, entity, state, switch_index, reason):
-        """Apply state to switch and log the action."""
+        """Apply state to switch and log the action.
+
+        This used to read the current state, compare it to the target, and --
+        when they differed -- call turn_on/turn_off and log "Turned ON/OFF" at
+        INFO unconditionally. For an entity that does not exist `get_state`
+        returns `None`, and `None == "off"` is False, so a missing switch fell
+        straight through to a service call into nothing and a log line claiming
+        it had worked.
+
+        That is the same defect as T-52's false success line: a log asserting an
+        outcome it never established. A command is only reported as sent when
+        there was something to send it to.
+        """
         try:
             # Check current state before making changes
             current_state = self.get_state(entity)
+
+            if current_state is None:
+                self.log(
+                    "[HT004] Switch {}: {} does not exist -- not commanding it "
+                    "{} ({})".format(switch_index, entity, state, reason),
+                    level="ERROR",
+                )
+                return
+
             if current_state == state:
                 return  # Already in desired state, no change needed
 
+            unreachable = str(current_state).lower() in ("unavailable", "unknown")
+            if unreachable:
+                # Still attempt it: an entity can report `unavailable` briefly
+                # and still accept the command, and refusing outright would be a
+                # behaviour change this ticket has no evidence for. What changes
+                # is that the outcome is no longer reported as a success.
+                self.log(
+                    "[HT005] Switch {}: {} is {} -- commanding it {} anyway, "
+                    "but it may not land ({})".format(
+                        switch_index, entity, current_state, state, reason
+                    ),
+                    level="WARNING",
+                )
+
             if state == "off":
                 self.turn_off(entity)
-                self.log(f"Switch {switch_index}: Turned OFF {entity} ({reason})", level="INFO")
+                if not unreachable:
+                    self.log(f"Switch {switch_index}: Turned OFF {entity} ({reason})", level="INFO")
             elif state == "on":
                 self.turn_on(entity)
-                self.log(f"Switch {switch_index}: Turned ON {entity} ({reason})", level="INFO")
+                if not unreachable:
+                    self.log(f"Switch {switch_index}: Turned ON {entity} ({reason})", level="INFO")
             else:
                 self.log(f"Switch {switch_index}: Unknown state '{state}' for {entity}", level="WARNING")
         except Exception as e:
